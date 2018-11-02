@@ -19,6 +19,8 @@
   :description "GAN MNIST with MXNet"
   :plugins [[lein-cljfmt "0.5.7"]]
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.apache.mxnet.contrib.clojure/clojure-mxnet "1.3.0-SNAPSHOT"]
-                 [nu.pattern/opencv "2.4.9-7"]]
+                 [org.apache.mxnet.contrib.clojure/clojure-mxnet-osx-cpu "1.3.0"]
+                 [nu.pattern/opencv "2.4.9-7"]
+                 [net.mikera/imagez "0.12.0"]
+                 [thinktopic/think.image "0.4.16"]]
   :main gan.gan-mnist)

@@ -29,7 +29,9 @@
             [org.apache.clojure-mxnet.shape :as mx-shape]
             [org.apache.clojure-mxnet.util :as util]
             [gan.viz :as viz]
-            [org.apache.clojure-mxnet.context :as context])
+            [org.apache.clojure-mxnet.context :as context]
+            [think.image.pixel :as pixel]
+            [mikera.image.core :as img])
   (:gen-class))
 
 ;; based off of https://medium.com/@julsimon/generative-adversarial-networks-on-apache-mxnet-part-1-b6d39e6b5df1
@@ -37,19 +39,76 @@
 
 (def data-dir "data/")
 (def output-path "results/")
-(def batch-size 100)
-(def num-epoch 10)
+(def batch-size 10)
+(def num-epoch 100)
 
 (io/make-parents (str output-path "gout"))
 
-(when-not (.exists (io/file (str data-dir "train-images-idx3-ubyte")))
+
+
+#_(when-not (.exists (io/file (str data-dir "train-images-idx3-ubyte")))
   (sh "../../scripts/get_mnist_data.sh"))
 
-(defonce mnist-iter (mx-io/mnist-iter {:image (str data-dir "train-images-idx3-ubyte")
+#_(defonce mnist-iter (mx-io/mnist-iter {:image (str data-dir "train-images-idx3-ubyte")
                                        :label (str data-dir "train-labels-idx1-ubyte")
                                        :input-shape [1 28 28]
                                        :batch-size batch-size
-                                       :shuffle true}))
+                                         :shuffle true}))
+
+(def flan-iter (mx-io/image-record-iter {:path-imgrec "flan.rec"
+                                         :data-shape [3 28 28]
+                                         :batch-size batch-size}))
+
+
+(defn postprocess-image [img]
+  (let [datas (ndarray/->vec img)
+        image-shape (mx-shape/->vec (ndarray/shape img))
+        spatial-size (* (get image-shape 2) (get image-shape 3))
+        pics (doall (partition (* 3 spatial-size) datas))
+        pixels  (mapv
+                 (fn [pic]
+                   (let [[rs gs bs] (doall (partition spatial-size pic))
+                         this-pixels (mapv (fn [r g b]
+                                             (pixel/pack-pixel
+                                              (int r)
+                                              (int g)
+                                              (int b)
+                                              (int 255)))
+                                           rs gs bs)]
+                     this-pixels))
+                 pics)
+        new-pixels (into [] (flatten pixels))
+        new-image (img/new-image (* 1 (get image-shape 3)) (* batch-size (get image-shape 2)))
+        _  (img/set-pixels new-image (int-array new-pixels))]
+    new-image))
+
+(defn postprocess-write-img [img filename]
+  (img/write (-> (postprocess-image img)
+                    (img/zoom 1.5)) filename "png"))
+
+(comment 
+  (def test-img (first (mx-io/batch-data (mx-io/next flan-iter))))  
+
+  (ndarray/shape test-img)
+
+  (postprocess-image test-img)
+  (do (img/show (-> (postprocess-image test-img)
+                    (img/zoom 1.5))))
+  
+  (img/write (-> (postprocess-image test-img)
+                    (img/zoom 1.5)) "results/flan.png" "png")
+
+  (ndarray/->vec  test-img)
+
+    (viz/im-sav {:title "Carin"
+               :output-path output-path
+               :x test-img
+               :flip false})
+
+
+
+)
+
 
 (def rand-noise-iter (mx-io/rand-iter [batch-size 100 1 1]))
 
@@ -66,6 +125,11 @@
   (conv-output-size 8 4 1 2) ;=> 4.0
   (conv-output-size 4 4 0 1) ;=> 1
 
+  (conv-output-size 128 4 3 2) ;=> 66
+  (conv-output-size 66 4 2 2) ;=> 34
+  (conv-output-size 34 4 2 2) ;=> 18.0
+  (conv-output-size 18 5 2 2) ;=> 1
+
   ;; Calcing the layer sizes for generator
   (defn deconv-output-size [input-size kernel-size padding stride]
     (-
@@ -80,7 +144,7 @@
 
 
 (def ndf 28) ;; image height /width
-(def nc 1) ;; number of channels
+(def nc 3) ;; number of channels
 (def eps (float (+ 1e-5  1e-12)))
 (def lr  0.0005) ;; learning rate
 (def beta1 0.5)
@@ -130,22 +194,17 @@
 
 (defn save-img-gout [i n x]
   (do
-    (viz/im-sav {:title (str "gout-" i "-" n)
-                 :output-path output-path
-                 :x x
-                 :flip false})))
+    (println "Carin gout shape is " (ndarray/shape x))
+    (postprocess-write-img x (str output-path "/" "gout-" i "-" n ".png"))))
 
 (defn save-img-diff [i n x]
-  (do (viz/im-sav {:title (str "diff-" i "-" n)
-                   :output-path output-path
-                   :x x
-                   :flip false})))
+  (do
+    (postprocess-write-img x (str output-path "/" "diff-" i "-" n ".png"))))
 
 (defn save-img-data [i n batch]
-  (do (viz/im-sav {:title (str "data-" i "-" n)
-                   :output-path output-path
-                   :x (first (mx-io/batch-data batch))
-                   :flip false})))
+  (do
+    (postprocess-write-img
+     (first (mx-io/batch-data batch)) (str output-path "/" "data-" i "-" n ".png"))))
 
 (defn calc-diff [i n diff-d]
   (let [diff (ndarray/copy diff-d)
@@ -159,8 +218,8 @@
 
 (defn train [devs]
   (let [mod-d  (-> (m/module (discriminator) {:contexts devs :data-names ["data"] :label-names ["label"]})
-                   (m/bind {:data-shapes (mx-io/provide-data mnist-iter)
-                            :label-shapes (mx-io/provide-label mnist-iter)
+                   (m/bind {:data-shapes (mx-io/provide-data flan-iter)
+                            :label-shapes (mx-io/provide-label flan-iter)
                             :inputs-need-grad true})
                    (m/init-params {:initializer (init/normal 0.02)})
                    (m/init-optimizer {:optimizer (opt/adam {:learning-rate lr :wd 0.0 :beta1 beta1})}))
@@ -171,13 +230,13 @@
 
     (println "Training for " num-epoch " epochs...")
     (doseq [i (range num-epoch)]
-      (mx-io/reduce-batches mnist-iter
+      (mx-io/reduce-batches flan-iter
                             (fn [n batch]
                               (let [rbatch (mx-io/next rand-noise-iter)
                                     out-g (-> mod-g
                                               (m/forward rbatch)
                                               (m/outputs))
-                                   ;; update the discriminiator on the fake
+                                    ;; update the discriminiator on the fake
                                     grads-f  (mapv #(ndarray/copy (first %)) (-> mod-d
                                                                                  (m/forward {:data (first out-g) :label [(ndarray/zeros [batch-size])]})
                                                                                  (m/backward)
@@ -198,7 +257,7 @@
                                     _ (-> mod-g
                                           (m/backward (first diff-d))
                                           (m/update))]
-                                (when (zero? (mod n 100))
+                                (when (zero? n)
                                   (println "iteration = " i  "number = " n)
                                   (save-img-gout i n (ndarray/copy (ffirst out-g)))
                                   (save-img-data i n batch)
@@ -214,4 +273,6 @@
     (train devs)))
 
 (comment
-  (train [(context/cpu)]))
+  (train [(context/cpu)])
+
+  )

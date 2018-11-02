@@ -36,18 +36,21 @@
                 :else (int %)))
        (mapv #(.byteValue %))))
 
+
+
 (defn get-img [raw-data channels height width flip]
   (let [totals (* height width)
         img (if (> channels 1)
               ;; rgb image
-              (let [[ra ga ba] (byte-array (partition totals raw-data))
+              (let [[ra ga ba] (doall (partition totals raw-data))
                     rr (new Mat height width (CvType/CV_8U))
                     gg (new Mat height width (CvType/CV_8U))
                     bb (new Mat height width (CvType/CV_8U))
-                    result (new Mat)]
-                (.put rr (int 0) (int 0) ra)
-                (.put gg (int 0) (int 0) ga)
-                (.put bb (int 0) (int 0) ba)
+                    result (new Mat height width (CvType/CV_8U))]
+                (do
+                  (.put rr 0 0 (byte-array ra))
+                  (.put gg 0 0 (byte-array ga))
+                  (.put bb 0 0 (byte-array ba)))
                 (Core/merge (java.util.ArrayList. [bb gg rr]) result)
                 result)
               ;; gray image
