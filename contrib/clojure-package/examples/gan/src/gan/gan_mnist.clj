@@ -39,7 +39,7 @@
 
 (def data-dir "data/")
 (def output-path "results/")
-(def batch-size 10)
+(def batch-size 5)
 (def num-epoch 100)
 
 (io/make-parents (str output-path "gout"))
@@ -55,8 +55,8 @@
                                        :batch-size batch-size
                                          :shuffle true}))
 
-(def flan-iter (mx-io/image-record-iter {:path-imgrec "flan.rec"
-                                         :data-shape [3 28 28]
+(def flan-iter (mx-io/image-record-iter {:path-imgrec "flan-256.rec"
+                                         :data-shape [3 256 256]
                                          :batch-size batch-size}))
 
 (defn normalize-rgb [x]
@@ -110,12 +110,6 @@
 
   (ndarray/shape test-img)
 
-  (postprocess-image test-img)
-  (do (img/show (-> (postprocess-image test-img)
-                    (img/zoom 1.5))))
-  
-  (img/write (-> (postprocess-image test-img)
-                    (img/zoom 1.5)) "results/flan.png" "png")
 
   (ndarray/->vec  test-img)
 
@@ -144,10 +138,14 @@
   (conv-output-size 8 4 1 2) ;=> 4.0
   (conv-output-size 4 4 0 1) ;=> 1
 
-  (conv-output-size 128 4 3 2) ;=> 66
-  (conv-output-size 66 4 2 2) ;=> 34
-  (conv-output-size 34 4 2 2) ;=> 18.0
-  (conv-output-size 18 5 2 2) ;=> 1
+  ;;;; for 256
+  (conv-output-size 256 4 3 2) ;=> 130
+  (conv-output-size 130 4 2 2) ;=> 67
+  (conv-output-size 66 4 2 2) ;=> 34.0
+  (conv-output-size 34 4 0 2) ;=> 16
+  (conv-output-size 16 4 1 2) ;=> 8
+  (conv-output-size 8 4 1 2) ;=> 4.0
+  (conv-output-size 4 4 0 1) ;=> 1
 
   ;; Calcing the layer sizes for generator
   (defn deconv-output-size [input-size kernel-size padding stride]
@@ -176,15 +174,27 @@
     (sym/batch-norm "dbn1" {:data data :fix-gamma true :eps eps})
     (sym/leaky-re-lu "dact1" {:data data :act-type "leaky" :slope 0.2})
 
-    (sym/convolution "d2" {:data data :kernel [4 4] :pad [1 1] :stride [2 2] :num-filter (* 2 ndf) :no-bias true})
+    (sym/convolution "d2" {:data data :kernel [4 4] :pad [2 2] :stride [2 2] :num-filter (* 2 ndf) :no-bias true})
     (sym/batch-norm "dbn2" {:data data :fix-gamma true :eps eps})
     (sym/leaky-re-lu "dact1" {:data data :act_type "leaky" :slope 0.2})
 
-    (sym/convolution "d3" {:data data :kernel [4 4] :pad [1 1] :stride [2 2] :num-filter (* 3 ndf) :no-bias true})
+    (sym/convolution "d3" {:data data :kernel [4 4] :pad [2 2] :stride [2 2] :num-filter (* 3 ndf) :no-bias true})
     (sym/batch-norm "dbn3" {:data data :fix-gamma true :eps eps})
     (sym/leaky-re-lu "dact3" {:data data :act_type "leaky" :slope 0.2})
 
-    (sym/convolution "d4" {:data data :kernel [4 4] :pad [0 0] :stride [1 1] :num-filter (* 4 ndf) :no-bias true})
+    (sym/convolution "d4" {:data data :kernel [4 4] :pad [0 0] :stride [2 2] :num-filter (* 3 ndf) :no-bias true})
+    (sym/batch-norm "dbn4" {:data data :fix-gamma true :eps eps})
+    (sym/leaky-re-lu "dact4" {:data data :act_type "leaky" :slope 0.2})
+
+    (sym/convolution "d5" {:data data :kernel [4 4] :pad [1 1] :stride [2 2] :num-filter (* 3 ndf) :no-bias true})
+    (sym/batch-norm "dbn5" {:data data :fix-gamma true :eps eps})
+    (sym/leaky-re-lu "dact5" {:data data :act_type "leaky" :slope 0.2})
+
+        (sym/convolution "d6" {:data data :kernel [4 4] :pad [1 1] :stride [2 2] :num-filter (* 3 ndf) :no-bias true})
+    (sym/batch-norm "dbn6" {:data data :fix-gamma true :eps eps})
+    (sym/leaky-re-lu "dact6" {:data data :act_type "leaky" :slope 0.2})
+
+    (sym/convolution "d7" {:data data :kernel [4 4] :pad [0 0] :stride [1 1] :num-filter (* 4 ndf) :no-bias true})
     (sym/flatten "flt" {:data data})
 
     (sym/fully-connected "fc" {:data data :num-hidden 1 :no-bias false})
@@ -204,8 +214,20 @@
     (sym/batch-norm "gbn3" {:data data :fix-gamma true :eps eps})
     (sym/activation "gact3" {:data data :act-type "relu"})
 
-    (sym/deconvolution "g4" {:data data :kernel [4 4] :pad [3 3] :stride [2 2] :num-filter nc :no-bias true})
-    (sym/activation "gact4" {:data data :act-type "tanh"})))
+    (sym/deconvolution "g4" {:data data :kernel [4 4] :pad [0 0] :stride [2 2] :num-filter ndf :no-bias true})
+    (sym/batch-norm "gbn4" {:data data :fix-gamma true :eps eps})
+    (sym/activation "gact4" {:data data :act-type "relu"})
+
+    (sym/deconvolution "g5" {:data data :kernel [4 4] :pad [2 2] :stride [2 2] :num-filter ndf :no-bias true})
+    (sym/batch-norm "gbn5" {:data data :fix-gamma true :eps eps})
+    (sym/activation "gact5" {:data data :act-type "relu"})
+
+    (sym/deconvolution "g6" {:data data :kernel [4 4] :pad [2 2] :stride [2 2] :num-filter ndf :no-bias true})
+    (sym/batch-norm "gbn6" {:data data :fix-gamma true :eps eps})
+    (sym/activation "gact6" {:data data :act-type "relu"})
+
+    (sym/deconvolution "g7" {:data data :kernel [4 4] :pad [3 3] :stride [2 2] :num-filter nc :no-bias true})
+    (sym/activation "gact7" {:data data :act-type "tanh"})))
 
 (let [data [(ndarray/ones [batch-size 100 1 1])]
       label [(ndarray/ones [batch-size 100 1 1])]]
