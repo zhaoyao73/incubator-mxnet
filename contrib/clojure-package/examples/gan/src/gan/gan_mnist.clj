@@ -40,7 +40,7 @@
 (def data-dir "data/")
 (def output-path "results/")
 (def batch-size 10)
-(def num-epoch 1)
+(def num-epoch 100)
 
 (io/make-parents (str output-path "gout"))
 
@@ -106,7 +106,7 @@
 
 
 (comment 
-  (def test-img (first (mx-io/batch-data (mx-io/next flan-iter))))  
+  (def test-img (normalize-rgb-ndarray (first (mx-io/batch-data (mx-io/next flan-iter)))))  
 
   (ndarray/shape test-img)
 
@@ -213,13 +213,32 @@
 
 (defn save-img-gout [i n x]
   (do
-    (postprocess-write-img x (str output-path "/" "gout-" i "-" n ".png"))))
+    (viz/im-sav {:title (str "gout-" i "-" n)
+                 :output-path output-path
+                 :x x
+                 :flip false})))
 
 (defn save-img-diff [i n x]
+  (do (viz/im-sav {:title (str "diff-" i "-" n)
+                   :output-path output-path
+                   :x x
+                   :flip false})))
+
+(defn save-img-data [i n batch]
+  (do (viz/im-sav {:title (str "data-" i "-" n)
+                   :output-path output-path
+                   :x batch
+                   :flip false})))
+
+#_(defn save-img-gout [i n x]
+  (do
+    (postprocess-write-img x (str output-path "/" "gout-" i "-" n ".png"))))
+
+#_(defn save-img-diff [i n x]
   (do
     (postprocess-write-img x (str output-path "/" "diff-" i "-" n ".png"))))
 
-(defn save-img-data [i n batch]
+#_(defn save-img-data [i n batch]
   (do
     (postprocess-write-img
      (first batch) (str output-path "/" "data-" i "-" n ".png"))))
@@ -279,7 +298,7 @@
                                 (when (zero? n)
                                   (println "iteration = " i  "number = " n)
                                   (save-img-gout i n (ndarray/copy (ffirst out-g)))
-                                  (save-img-data i n dbatch)
+                                  (save-img-data i n (first dbatch))
                                   (calc-diff i n (ffirst diff-d)))
                                 (inc n)))))))
 
