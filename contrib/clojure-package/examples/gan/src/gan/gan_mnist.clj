@@ -55,8 +55,8 @@
                                        :batch-size batch-size
                                          :shuffle true}))
 
-(def flan-iter (mx-io/image-record-iter {:path-imgrec "flan-256.rec"
-                                         :data-shape [3 256 256]
+(def flan-iter (mx-io/image-record-iter {:path-imgrec "flan-128.rec"
+                                         :data-shape [3 128 128]
                                          :batch-size batch-size}))
 
 (defn normalize-rgb [x]
@@ -138,9 +138,8 @@
   (conv-output-size 8 4 1 2) ;=> 4.0
   (conv-output-size 4 4 0 1) ;=> 1
 
-  ;;;; for 256
-  (conv-output-size 256 4 3 2) ;=> 130
-  (conv-output-size 130 4 2 2) ;=> 67
+  ;;;; for 128
+  (conv-output-size 128 4 3 2) ;=> 66
   (conv-output-size 66 4 2 2) ;=> 34.0
   (conv-output-size 34 4 0 2) ;=> 16
   (conv-output-size 16 4 1 2) ;=> 8
@@ -170,11 +169,7 @@
 
 (defn discriminator []
   (as-> (sym/variable "data") data
-    (sym/convolution "d1" {:data data :kernel [4 4] :pad [3 3] :stride [2 2] :num-filter ndf :no-bias true})
-    (sym/batch-norm "dbn1" {:data data :fix-gamma true :eps eps})
-    (sym/leaky-re-lu "dact1" {:data data :act-type "leaky" :slope 0.2})
-
-    (sym/convolution "d2" {:data data :kernel [4 4] :pad [2 2] :stride [2 2] :num-filter (* 2 ndf) :no-bias true})
+    (sym/convolution "d2" {:data data :kernel [4 4] :pad [3 3] :stride [2 2] :num-filter (* 2 ndf) :no-bias true})
     (sym/batch-norm "dbn2" {:data data :fix-gamma true :eps eps})
     (sym/leaky-re-lu "dact1" {:data data :act_type "leaky" :slope 0.2})
 
@@ -221,10 +216,6 @@
     (sym/deconvolution "g5" {:data data :kernel [4 4] :pad [2 2] :stride [2 2] :num-filter ndf :no-bias true})
     (sym/batch-norm "gbn5" {:data data :fix-gamma true :eps eps})
     (sym/activation "gact5" {:data data :act-type "relu"})
-
-    (sym/deconvolution "g6" {:data data :kernel [4 4] :pad [2 2] :stride [2 2] :num-filter ndf :no-bias true})
-    (sym/batch-norm "gbn6" {:data data :fix-gamma true :eps eps})
-    (sym/activation "gact6" {:data data :act-type "relu"})
 
     (sym/deconvolution "g7" {:data data :kernel [4 4] :pad [3 3] :stride [2 2] :num-filter nc :no-bias true})
     (sym/activation "gact7" {:data data :act-type "tanh"})))
