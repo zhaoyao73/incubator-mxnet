@@ -40,22 +40,22 @@
 (def data-dir "data/")
 (def output-path "results/")
 (def batch-size 5)
-(def num-epoch 30)
+(def num-epoch 10)
 
 (io/make-parents (str output-path "gout"))
 
 (defn last-saved-model-number []
-  (some->> "."
+  (some->> "model"
            clojure.java.io/file
            file-seq
            (filter #(.isFile %))
            (map #(.getName %))
            (filter #(clojure.string/includes? %  "model-d"))
-           reverse
-           first
-           (re-seq #"\d{4}")
-           first
-           Integer/parseInt))
+           (map #(re-seq #"\d{4}" %))
+           (map first)
+           (map #(when % (Integer/parseInt %)))
+           (sort)
+           (last)))
 
 
 
@@ -70,7 +70,8 @@
 
 (def flan-iter (mx-io/image-record-iter {:path-imgrec "flan-128.rec"
                                          :data-shape [3 128 128]
-                                         :batch-size batch-size}))
+                                         :batch-size batch-size
+                                         :shuffle true}))
 
 (defn normalize-rgb [x]
   (/ (- x 128.0) 128.0))
