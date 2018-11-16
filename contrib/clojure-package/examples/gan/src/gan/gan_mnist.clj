@@ -362,32 +362,35 @@
     (train devs)))
 
 
-(defn explore-flans [epoch]
+(defn explore-flans [epoch num]
 
   (let [mod-g (-> (m/load-checkpoint {:contexts [(context/default-context)]
-                                     :data-names ["rand"]
+                                      :data-names ["rand"]
                                       :label-names [""]
                                       :prefix "model-g"
                                       :epoch epoch
                                       :load-optimizer-states true})
                   (m/bind {:data-shapes (mx-io/provide-data rand-noise-iter)})
                   (m/init-params {:initializer (init/normal 0.02)})
-                  (m/init-optimizer {:optimizer (opt/adam {:learning-rate lr :wd 0.0 :beta1 beta1})}))
-        rbatch (mx-io/next rand-noise-iter)
-        out-g (-> mod-g
-                  (m/forward rbatch)
-                  (m/outputs))]
-    (println "Generating image from " epoch)
-    (viz/im-sav {:title (str "explore-" epoch "-" 0)
-                 :output-path output-path
-                 :x (ffirst out-g)
-                 :flip false})
-    (-> (img/load-image (str "results/explore-" epoch "-" 0 ".jpg"))
-        (img/show))))
+                  (m/init-optimizer {:optimizer (opt/adam {:learning-rate lr :wd 0.0 :beta1 beta1})}))]
+
+    (println "Generating images from " epoch)
+    (dotimes [i num]
+      (let [rbatch (mx-io/next rand-noise-iter)
+            out-g (-> mod-g
+                      (m/forward rbatch)
+                      (m/outputs))]
+        (viz/im-sav {:title (str "explore-" epoch "-" i)
+                     :output-path output-path
+                     :x (ffirst out-g)
+                     :flip false})
+        (-> (img/load-image (str "results/explore-" epoch "-" i ".jpg"))
+            (img/show))))))
 
 (comment
   (train [(context/cpu)])
 
-  (explore-flans 192)
+
+  (explore-flans 195 2)
 
   )
